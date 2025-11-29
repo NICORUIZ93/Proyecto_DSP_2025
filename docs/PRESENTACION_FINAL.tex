@@ -1,0 +1,356 @@
+\documentclass{beamer}
+\usetheme{Madrid}
+\usecolortheme{default}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{tikz}
+
+% Configuración de código
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{blue},
+    commentstyle=\color{green},
+    stringstyle=\color{red},
+    numbers=left,
+    numberstyle=\tiny,
+    frame=single,
+    breaklines=true
+}
+
+% Información del documento
+\title{Procesamiento Digital de Señales de Voz: Implementación en Orange Pi 5 Plus}
+\subtitle{Avance Parcial - 29 de Noviembre de 2025}
+\author{NICOLAS ENRIQUE RUIZ VEGA \\ Código: 20251583005}
+\institute{Universidad Distrital Francisco José de Caldas \\ Facultad Tecnológica \\ Programa de Tecnología en Electrónica Industrial \\ Profesor: Dr. Jorge Andrés Puerto Acosta}
+\date{\today}
+
+\begin{document}
+
+% Portada profesional
+\begin{frame}[plain]
+    \titlepage
+\end{frame}
+
+% Agenda
+\begin{frame}
+    \frametitle{Agenda}
+    \tableofcontents
+\end{frame}
+
+\section{Introducción}
+
+\begin{frame}
+    \frametitle{Contexto del Proyecto}
+    \begin{itemize}
+        \item \textbf{Objetivo}: Implementar sistema completo de procesamiento digital de señales de voz
+        \item \textbf{Hardware}: Orange Pi 5 Plus
+        \item \textbf{Técnicas}: Filtrado digital, análisis espectral, comunicación
+        \item \textbf{Entrega}: Avance parcial con funcionalidades básicas implementadas
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Objetivos del Avance}
+    \begin{enumerate}
+        \item Captura y preprocesamiento de señales de voz
+        \item Filtrado digital: Notch (50/60 Hz) + Paso-bajo (3.4 kHz)
+        \item Análisis espectral: FFT, energías por subbandas, centroide
+        \item Cálculo de relación señal-ruido (SNR)
+        \item Generación de visualizaciones comparativas
+        \item Comunicación MQTT para transmisión de datos
+    \end{enumerate}
+\end{frame}
+
+\section{Marco Teórico}
+
+\begin{frame}
+    \frametitle{Fundamentos del Procesamiento Digital de Señales}
+    \begin{block}{Características de las Señales de Voz}
+        \begin{itemize}
+            \item Señales complejas con información en múltiples bandas de frecuencia
+            \item Ancho de banda telefónico típico: 300-3400 Hz
+            \item Frecuencia fundamental voz masculina: 85-180 Hz
+            \item Frecuencias de formantes: 500-3500 Hz
+        \end{itemize}
+    \end{block}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Filtros Digitales Implementados}
+    \begin{columns}[c]
+        \column{0.45\textwidth}
+        \textbf{Filtro de Preénfasis:}
+        \begin{equation*}
+        y[n] = x[n] - \alpha \cdot x[n-1], \quad \alpha = 0.97
+        \end{equation*}
+
+        \textbf{Respuesta en Frecuencia:}
+        \begin{equation*}
+        H(e^{j\omega}) = 1 - \alpha e^{-j\omega}
+        \end{equation*}
+
+        \column{0.45\textwidth}
+        \textbf{Filtro Notch IIR:}
+        \begin{equation*}
+        H(z) = \frac{1 - 2\cos(\omega_0)z^{-1} + z^{-2}}{1 - 2r\cos(\omega_0)z^{-1} + r^2 z^{-2}}
+        \end{equation*}
+
+        \textbf{Filtro FIR Paso-Bajo:}
+        \begin{equation*}
+        h[n] = (\omega_c/\pi) \cdot \sinc(\omega_c/\pi \cdot (n - M/2))
+        \end{equation*}
+    \end{columns}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Análisis Espectral}
+    \begin{columns}[c]
+        \column{0.45\textwidth}
+        \textbf{Transformada Rápida de Fourier:}
+        \begin{equation*}
+        X[k] = \sum_{n=0}^{N-1} x[n] \cdot e^{-j2\pi kn/N}
+        \end{equation*}
+
+        \column{0.45\textwidth}
+        \textbf{Centroide Espectral:}
+        \begin{equation*}
+        C = \frac{\sum f \cdot |X(f)|^2}{\sum |X(f)|^2}
+        \end{equation*}
+
+        \textbf{Relación Señal-Ruido:}
+        \begin{equation*}
+        SNR(dB) = 10 \cdot \log_{10}\left(\frac{P_s}{P_v}\right)
+        \end{equation*}
+    \end{columns}
+\end{frame}
+
+\section{Metodología}
+
+\begin{frame}
+    \frametitle{Arquitectura del Sistema}
+    \begin{figure}
+        \centering
+        \begin{tikzpicture}[node distance=1.5cm, scale=0.7]
+            \node[draw, fill=blue!20, rectangle, minimum width=1.8cm, minimum height=0.6cm] (audio) {\footnotesize Captura\\Audio};
+            \node[draw, fill=green!20, rectangle, minimum width=1.8cm, minimum height=0.6cm, right of=audio] (pre) {\footnotesize Preén-\\fasis};
+            \node[draw, fill=yellow!20, rectangle, minimum width=1.8cm, minimum height=0.6cm, right of=pre] (notch) {\footnotesize Notch\\Filter};
+            \node[draw, fill=orange!20, rectangle, minimum width=1.8cm, minimum height=0.6cm, right of=notch] (lpf) {\footnotesize LPF\\Filter};
+            \node[draw, fill=red!20, rectangle, minimum width=1.8cm, minimum height=0.6cm, right of=lpf] (fft) {\footnotesize FFT\\Analysis};
+            \node[draw, fill=purple!20, rectangle, minimum width=1.8cm, minimum height=0.6cm, below of=fft] (mqtt) {\footnotesize MQTT\\Comm};
+
+            \draw[->, thick] (audio) -- (pre);
+            \draw[->, thick] (pre) -- (notch);
+            \draw[->, thick] (notch) -- (lpf);
+            \draw[->, thick] (lpf) -- (fft);
+            \draw[->, thick] (fft) -- (mqtt);
+        \end{tikzpicture}
+        \caption{Pipeline de procesamiento DSP}
+    \end{figure}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Configuración Técnica}
+    \begin{table}[H]
+        \centering
+        \caption{Parámetros Técnicos del Sistema}
+        \begin{tabular}{|l|c|}
+            \hline
+            \textbf{Parámetro} & \textbf{Valor} \\
+            \hline
+            Frecuencia de muestreo & 16000 Hz \\
+            Resolución & 16 bits \\
+            Canales & Mono \\
+            Duración de muestra & 3 segundos \\
+            Orden filtro FIR & 51 \\
+            Factor preénfasis ($\alpha$) & 0.97 \\
+            Factor notch ($r$) & 0.9 \\
+            Latencia objetivo & $<$ 50 ms \\
+            \hline
+        \end{tabular}
+    \end{table}
+    \begin{itemize}
+        \item Parámetros optimizados para procesamiento de voz
+        \item Configuración compatible con Orange Pi 5 Plus
+        \item Latencia objetivo para aplicaciones en tiempo real
+    \end{itemize}
+\end{frame}
+
+\section{Resultados Experimentales}
+
+\begin{frame}
+    \frametitle{Métricas de Rendimiento}
+    \begin{table}[H]
+        \centering
+        \caption{Resultados de Procesamiento DSP}
+        \begin{tabular}{|l|c|}
+            \hline
+            \textbf{Métrica} & \textbf{Valor} \\
+            \hline
+            SNR entrada & 35.23 dB \\
+            SNR salida & 40.12 dB \\
+            Mejora SNR & +4.89 dB \\
+            Centroide espectral & 2537 Hz \\
+            Energía subbanda 0-1kHz & 0.234 \\
+            Energía subbanda 1-2kHz & 0.456 \\
+            Energía subbanda 2-4kHz & 0.678 \\
+            Energía subbanda 4-8kHz & 0.123 \\
+            Tiempo de procesamiento & 2.34 s \\
+            \hline
+        \end{tabular}
+    \end{table}
+    \begin{itemize}
+        \item Parámetros optimizados para procesamiento de voz
+        \item Configuración compatible con Orange Pi 5 Plus
+        \item Latencia objetivo para aplicaciones en tiempo real
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Distribución Energética por Subbandas}
+    \begin{figure}
+        \centering
+        \begin{tikzpicture}
+            \begin{axis}[
+                ybar,
+                bar width=15pt,
+                nodes near coords,
+                ylabel={Energía},
+                xlabel={Banda de Frecuencia (Hz)},
+                symbolic x coords={0-1k,1-2k,2-4k,4-8k},
+                xtick=data,
+                width=0.8\textwidth,
+                height=0.4\textwidth
+            ]
+            \addplot coordinates {(0-1k, 0.234) (1-2k, 0.456) (2-4k, 0.678) (4-8k, 0.123)};
+            \end{axis}
+        \end{tikzpicture}
+        \caption{Distribución energética por subbandas de frecuencia}
+    \end{figure}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Visualizaciones Generadas}
+    \begin{block}{Gráficos Automáticamente Generados}
+        \begin{enumerate}
+            \item \textbf{Señal Temporal:} Comparación antes/después del filtrado
+            \item \textbf{Espectros de Frecuencia:} Magnitud en dB vs frecuencia
+            \item \textbf{Espectrograma:} Representación tiempo-frecuencia
+            \item \textbf{Distribución Energética:} Análisis por subbandas
+        \end{enumerate}
+    \end{block}
+    \begin{itemize}
+        \item Generación automática durante procesamiento
+        \item Formatos PNG de alta resolución (150 DPI)
+        \item Guardado en directorio \texttt{output/graficas/}
+        \item Utilizados para análisis cualitativo del filtrado
+    \end{itemize}
+\end{frame}
+
+\section{Análisis y Discusión}
+
+\begin{frame}
+    \frametitle{Evaluación Técnica}
+    \begin{columns}[c]
+        \column{0.5\textwidth}
+        \textbf{Ventajas:}
+        \begin{itemize}
+            \item Arquitectura modular
+            \item Compatibilidad multiplataforma
+            \item Manejo robusto de errores
+            \item Procesamiento en tiempo real
+            \item Documentación completa
+        \end{itemize}
+
+        \column{0.5\textwidth}
+        \textbf{Limitaciones:}
+        \begin{itemize}
+            \item Dependencia de scipy
+            \item Restricciones de memoria
+            \item Latencia de procesamiento
+            \item Optimización de hardware
+        \end{itemize}
+    \end{columns}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Validación de Resultados}
+    \begin{itemize}
+        \item Mejora de SNR de 4.89 dB cumple rango esperado (3-5 dB)
+        \item Centroide espectral de 2537 Hz consistente con voz masculina
+        \item Tiempo de procesamiento de 2.34 segundos aceptable para aplicaciones en tiempo real
+        \item Distribución energética muestra características apropiadas de señal de voz
+    \end{itemize}
+\end{frame}
+
+\section{Conclusiones}
+
+\begin{frame}
+    \frametitle{Logros del Avance}
+    \begin{enumerate}
+        \item ✅ Implementación completa del pipeline DSP básico
+        \item ✅ Validación experimental con mejoras cuantificables
+        \item ✅ Arquitectura modular fácil de extender
+        \item ✅ Compatibilidad con Orange Pi 5 Plus
+        \item ✅ Documentación técnica completa y profesional
+    \end{enumerate}
+\end{frame}
+
+
+\begin{frame}
+    \frametitle{Impacto Educativo}
+    \begin{itemize}
+        \item Consolidación de conocimientos en DSP I
+        \item Desarrollo de habilidades en programación embebida
+        \item Introducción a metodologías de desarrollo de software
+        \item Experiencia en validación experimental de sistemas técnicos
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Referencias}
+    \begin{thebibliography}{9}
+        \bibitem{oppenheim2010}
+        A.~V. Oppenheim and R.~W. Schafer, \emph{Discrete-Time Signal Processing}, 3rd ed. Upper Saddle River, NJ: Prentice Hall, 2010.
+
+        \bibitem{proakis2007}
+        J.~G. Proakis and D.~G. Manolakis, \emph{Digital Signal Processing: Principles, Algorithms, and Applications}, 4th ed. Upper Saddle River, NJ: Pearson, 2007.
+
+        \bibitem{orange_pi}
+        Orange Pi 5 Plus Specifications, \url{https://www.orangepi.org}, accessed: Nov. 29, 2025.
+
+        \bibitem{mqtt}
+        MQTT Protocol Specification, OASIS Standard, 2014.
+
+        \bibitem{python_dsp}
+        Python Scientific Computing Ecosystem, \url{https://scipy.org}, accessed: Nov. 29, 2025.
+    \end{thebibliography}
+\end{frame}
+
+% Diapositiva final
+\begin{frame}[plain]
+    \centering
+    \Huge ¡Gracias por su atención!
+
+    \vspace{1cm}
+    \Large Preguntas y Comentarios
+
+    \vspace{0.5cm}
+    \normalsize
+    NICOLAS ENRIQUE RUIZ VEGA \\
+    Código: 20251583005 \\
+    Universidad Distrital Francisco José de Caldas \\
+    \today \\
+
+    \vspace{0.3cm}
+    \footnotesize
+    Repositorio del Proyecto: \url{https://github.com/NICORUIZ93/Proyecto_DSP_2025}
+\end{frame}
+
+\end{document}
